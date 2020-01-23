@@ -1,0 +1,325 @@
+---
+title: "Handwritten Digit Recognition"
+author: 
+   - NIANG Mohamed
+   - KAINA Mohamed Abdellah
+   - NGREMMADJI Mbaimou Auxence
+date: "31 Octobre 2019"
+output:
+  pdf_document: 
+    highlight: haddock
+    number_sections: yes
+    toc: yes
+---
+
+```{r, include=FALSE}
+options(tinytex.verbose = TRUE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**This is a classification problem (Machine Learning)**
+
+**The two digits we have chosen for the classification are 0 and 8**
+
+# Preliminaries
+## Set Working Directory
+```{r working directory}
+WORKING_DIR <- "C:/Users/HP/Desktop/ML PROJECT" 
+COLORS <- c('white','black')
+setwd(WORKING_DIR)
+```
+
+## Load libraries/data/create new variables
+
+```{r loadData}
+# Load Libraries 
+library(MASS)
+library(plyr)
+library(knitr) # Markdown 
+library(RColorBrewer) 
+library(ElemStatLearn) 
+library(foreign) # For reading and writing data stored
+library(mlbench)
+library(caret)
+library(tree)
+library(maptree) 
+library(rpart.plot)
+library(rpart) # Recursive Partitioning and Regression Trees (RPart)
+library(ipred)
+library(randomForest)
+library(RWeka) # Weka 
+library(FNN) # Fast k-Nearest Neighbors (kNN)
+library(e1071) # Support Vector Machine (SVM) 
+
+# Set Color
+# colorRampPalette(COLORS) ( 4 )
+CUSTOM_COLORS <- colorRampPalette(colors=COLORS)
+CUSTOM_COLORS_PLOT <- colorRampPalette(brewer.pal(10,"Set3"))
+
+# Load data
+data(zip.train)
+data(zip.test)
+
+DATASET.train <- as.data.frame(zip.train)
+DATASET.test <- as.data.frame(zip.test)
+```
+
+------
+
+# Data Exploratory Analysis
+
+## Look at the TRAINING data set 
+### Check the number of observations in the zip.train (ntrain = 7291)
+
+```{r, dependson="loadData"}
+dim(DATASET.train)
+```
+
+## Plot the value of the first four examples of the zip.train
+
+```{r}
+par(mfrow=c(1,4));
+image(zip2image(zip.train,1), col=gray(256:0/256), zlim=c(0,1), xlab="", ylab="",xaxt="n",yaxt="n")
+image(zip2image(zip.train,2), col=gray(256:0/256), zlim=c(0,1), xlab="", ylab="",xaxt="n",yaxt="n")
+image(zip2image(zip.train,3), col=gray(256:0/256), zlim=c(0,1), xlab="", ylab="",xaxt="n",yaxt="n")
+image(zip2image(zip.train,4), col=gray(256:0/256), zlim=c(0,1), xlab="", ylab="",xaxt="n",yaxt="n")
+```
+
+
+## Look at the TEST data set 
+### Check the number of observations in the zip.test (ntest = 2007)
+```{r, dependson="loadData"}
+dim(DATASET.test)
+```
+
+## Plot the value of the first four examples of the zip.test
+
+```{r}
+par(mfrow=c(1,4));
+image(zip2image(zip.test,1), col=gray(256:0/256), zlim=c(0,1), xlab="", ylab="",xaxt="n",yaxt="n")
+image(zip2image(zip.test,2), col=gray(256:0/256), zlim=c(0,1), xlab="", ylab="",xaxt="n",yaxt="n")
+image(zip2image(zip.test,3), col=gray(256:0/256), zlim=c(0,1), xlab="", ylab="",xaxt="n",yaxt="n")
+image(zip2image(zip.test,4), col=gray(256:0/256), zlim=c(0,1), xlab="", ylab="",xaxt="n",yaxt="n")
+```
+
+## Chose the two digits 0 and 8 in the Training Set
+```{r, dependson="loadData"}
+DATASET.train <- DATASET.train[ which(DATASET.train$V1 == '0' | DATASET.train$V1 == '8'), ]
+```
+
+## Chose the two digits 0 and 8 in the Test Set
+```{r, dependson="loadData"}
+DATASET.test <- DATASET.test[ which(DATASET.test$V1 == '0' | DATASET.test$V1 == '8'), ]
+```
+
+## Find number of missing values/check ranges (TRAINING data set)
+
+```{r, dependson="loadData"}
+sum(is.na(DATASET.train))
+```
+
+## Find number of missing values/check ranges (TESTING data set)
+
+```{r, dependson="loadData"}
+sum(is.na(DATASET.test))
+```
+
+## Transformation. Transform Label as Factor (Categorical) and Change Column Names (TRAINING data set)
+```{r, dependson="loadData"}
+DATASET.train[,1] <- as.factor(DATASET.train[,1]) # As Category
+colnames(DATASET.train) <- c("Y",paste("X.",1:256,sep=""))
+class(DATASET.train[,1])
+levels(DATASET.train[,1])
+```
+
+## Transformation. Transform Label as Factor (Categorical) and Change Column Names (TESTING data set)
+```{r, dependson="loadData"}
+DATASET.test[,1] <- as.factor(DATASET.test[,1]) # As Category
+colnames(DATASET.test) <- c("Y",paste("X.",1:256,sep=""))
+class(DATASET.test[,1])
+levels(DATASET.test[,1])
+```
+
+## Total Number of Digits (Training Set)
+```{r, dependson="loadData"}
+resTable <- table(DATASET.train$Y)
+par(mfrow=c(1,1))
+par(mar=c(5, 4, 4, 2) + 0.1) # increase y-axis margin.
+plot <- plot(DATASET.train$Y,col=CUSTOM_COLORS_PLOT(10), main="Total Number of Digits (Training Set)", ylim=c(0,1500), ylab="Examples Number")
+text(x=plot,y=resTable+50, labels=resTable, cex=0.75)
+par(mfrow=c(1,1))
+percentage <- round(resTable/sum(resTable)*100)
+labels <- paste0 (row.names(resTable), " (", percentage ,"%) ") # add percents to labels
+```
+
+## Total Number of Digits (Testing Set)
+```{r, dependson="loadData"}
+resTable <- table(DATASET.test$Y)
+par(mfrow=c(1,1))
+par(mar=c(5, 4, 4, 2) + 0.1) # increase y-axis margin.
+plot <- plot(DATASET.test$Y,col=CUSTOM_COLORS_PLOT(10), main="Total Number of Digits (Testing Set)", ylim=c(0,400), ylab="Examples Number")
+text(x=plot,y=resTable+20, labels=resTable, cex=0.75)
+par(mfrow=c(1,1))
+percentage <- round(resTable/sum(resTable)*100)
+labels <- paste0 (row.names(resTable), " (", percentage ,"%) ") # add percents to labels
+```
+
+------
+
+# Machine Learning Classifiers
+
+## Classification. Predictive Model. Naive Bayes Algorithm 
+```{r model_naiveBayes, dependson="loadData"}
+pc <- proc.time()
+model.naiveBayes <- naiveBayes(DATASET.train$Y ~ . , data=DATASET.train)
+proc.time() - pc
+summary(model.naiveBayes)
+```
+
+### Confusion Matrix (naiveBayes)
+```{r dependson="model_naiveBayes"}
+prediction.naiveBayes <- predict(model.naiveBayes, newdata=DATASET.test, type='class')
+table("Actual Class"=DATASET.test$Y, "Predicted Class"=prediction.naiveBayes)
+error.rate.naiveBayes <- sum(DATASET.test$Y != prediction.naiveBayes) / nrow(DATASET.test)
+accuracy.naiveBayes <- 1 - error.rate.naiveBayes
+print (paste0("Accuary (Precision): ", accuracy.naiveBayes))
+```
+
+------
+
+## Classification. k-Nearest Neighbors (kNN) Algorithm 
+
+```{r model_knn, dependson="loadData"}
+pc <- proc.time()
+model.knn <- IBk(DATASET.train$Y ~ . , data=DATASET.train)
+proc.time() - pc
+summary(model.knn)
+```
+
+### Confusion Matrix (kNN)
+```{r dependson="model_knn"}
+prediction.knn <- predict(model.knn, newdata=DATASET.test, type='class')
+table("Actual Class"=DATASET.test$Y, "Predicted Class"=prediction.knn)
+error.rate.knn <- sum(DATASET.test$Y != prediction.knn) / nrow(DATASET.test)
+accuracy.knn <- 1 - error.rate.knn
+print (paste0("Accuary (Precision): ", accuracy.knn))
+```
+
+------
+
+## Classification. Fast Nearest Neighbors (FNN) Algorithm 
+
+```{r model_fnn, dependson="loadData"}
+pc <- proc.time()
+# Avoid Name Collision (knn)
+model.fnn <- FNN::knn(DATASET.train[,-1], DATASET.test[, -1], DATASET.train$Y, k = 10, algorithm="cover_tree")
+proc.time() - pc
+summary(model.fnn)
+```
+
+### Confusion Matrix (FNN)
+```{r dependson="model_fnn"}
+table("Actual Class"=DATASET.test$Y, "Predicted Class"=model.fnn)
+error.rate.fnn <- sum(DATASET.test$Y != model.fnn) / nrow(DATASET.test)
+accuracy.fnn <- 1 - error.rate.fnn
+print (paste0("Accuary (Precision): ", accuracy.fnn))
+```
+
+------
+
+## Classification. Predictive Model. SVM (Support Vector Machine) Algorithm 
+```{r model_svm, dependson="loadData"}
+pc <- proc.time()
+model.svm <- svm(DATASET.train$Y ~ . ,method="class", data=DATASET.train)
+proc.time() - pc
+summary(model.svm)
+```
+
+### Confusion Matrix (SVM)
+```{r dependson="model_svm"}
+prediction.svm <- predict(model.svm, newdata=DATASET.test, type='class')
+table("Actual Class"=DATASET.test$Y, "Predicted Class"=prediction.svm)
+error.rate.svm <- sum(DATASET.test$Y != prediction.svm) / nrow(DATASET.test)
+accuracy.svm <- 1 - error.rate.svm
+print (paste0("Accuary (Precision): ", accuracy.svm))
+```
+
+------
+
+## Classification. Predictive Model. RPart (Recursive Partitioning and Regression Trees) Algorithm 
+
+```{r model_rpart, dependson="loadData"}
+pc <- proc.time()
+model.rpart <- rpart(DATASET.train$Y ~ . ,method="class", data=DATASET.train)
+proc.time() - pc
+printcp(model.rpart)
+plotcp(model.rpart) # visualize cross-validation results
+
+rpart.plot(model.rpart, box.palette="RdBu", shadow.col="gray", nn=TRUE, uniform=TRUE, main="Tree of Handwritten Digit Recognition ")
+```
+
+### Confusion Matrix (RPart)
+```{r dependson="model_rpart"}
+prediction.rpart <- predict(model.rpart, newdata=DATASET.test, type='class')
+table("Actual Class"=DATASET.test$Y, "Predicted Class"=prediction.rpart)
+error.rate.rpart <- sum(DATASET.test$Y != prediction.rpart) / nrow(DATASET.test)
+accuracy.rpart <- 1 - error.rate.rpart
+print (paste0("Accuary (Precision): ", accuracy.rpart))
+```
+
+------
+
+## Classification. Predictive Model. Bagging Algorithm 
+
+```{r model_bagging, dependson="loadData"}
+pc <- proc.time()
+model.bagging <- bagging(DATASET.train$Y ~ . , method="class", data=DATASET.train, coob = TRUE, control = rpart.control(minsplit = 2, cp = 0))
+proc.time() - pc
+```
+
+### Confusion Matrix (Bagging)
+```{r dependson="model_bagging"}
+prediction.bagging <- predict(model.bagging, newdata=DATASET.test, type='class')
+table("Actual Class"=DATASET.test$Y, "Predicted Class"=prediction.bagging)
+error.rate.bagging <- sum(DATASET.test$Y != prediction.bagging) / nrow(DATASET.test)
+accuracy.bagging <- 1 - error.rate.bagging
+print (paste0("Accuary (Precision): ", accuracy.bagging))
+```
+
+## Classification. Predictive Model. Random Forest Algorithm 
+
+```{r model_forest, dependson="loadData"}
+pc <- proc.time()
+model.forest <- randomForest(DATASET.train$Y ~ . , method="class", data=DATASET.train, importance=TRUE)
+proc.time() - pc
+```
+
+### Confusion Matrix (Random Forest)
+```{r dependson="model_forest"}
+prediction.forest <- predict(model.forest, newdata=DATASET.test, type='class')
+table("Actual Class"=DATASET.test$Y, "Predicted Class"=prediction.forest)
+error.rate.forest <- sum(DATASET.test$Y != prediction.forest) / nrow(DATASET.test)
+accuracy.forest <- 1 - error.rate.forest
+print (paste0("Accuary (Precision): ", accuracy.forest))
+```
+
+# Model comparison and Conclusion
+
+## Model Comparison
+```{r model_selection, dependson="loadData"}
+models <- c('naiveBayes', 'knn', 'fnn', 'svm', 'rpart', 'bagging', 'randomforest')
+accuracy <- c(accuracy.naiveBayes, accuracy.knn, accuracy.fnn, accuracy.svm, accuracy.rpart, accuracy.bagging, accuracy.forest)
+results <- data.frame("Models" = models, "Accuracy" = accuracy)
+# Table comparison
+kable(arrange(results,desc(accuracy)))
+```
+
+## Conclusion
+
+From the results of the different models we have had, it seems that **svm** gives better results and could be used for prediction for new observations.
+
+------
+
